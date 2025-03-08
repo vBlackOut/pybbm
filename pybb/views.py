@@ -506,9 +506,8 @@ class PostEditMixin(PybbFormsMixin):
         return self.render_to_response(self.get_context_data(form=form,
                                                              aformset=aformset,
                                                              pollformset=pollformset))
-
 class AddPostView(CreateView):
-    form_class = PostForm  # Forcer l'utilisation de PostForm
+    form_class = PostForm
 
     @method_decorator(csrf_protect)
     def dispatch(self, request, *args, **kwargs):
@@ -517,6 +516,8 @@ class AddPostView(CreateView):
         self.user = request.user
         print(f"Utilisateur: {self.user.username}, is_authenticated: {self.user.is_authenticated}")
 
+        # Initialiser self.forum et self.topic
+        self.forum = None
         self.topic = get_object_or_404(perms.filter_topics(request.user, Topic.objects.all()), pk=kwargs['topic_id'])
         if not perms.may_create_post(self.user, self.topic):
             raise PermissionDenied
@@ -531,7 +532,7 @@ class AddPostView(CreateView):
             'may_create_poll': False,
             'may_edit_topic_slug': False
         }
-        print(f"Form kwargs - user: {form_kwargs['user']}, is_authenticated: {form_kwargs['user'].is_authenticated}")
+        print(f"Form kwargs - user: {form_kwargs['user']}, topic: {form_kwargs['topic'].id}")
         return form_kwargs
 
     def form_valid(self, form):
@@ -555,58 +556,6 @@ class AddPostView(CreateView):
 
     def get(self, request, *args, **kwargs):
         return HttpResponse("Utilisez POST pour ajouter un message", status=405)
-
-    def get_form_kwargs(self):
-        ip = self.request.META.get('REMOTE_ADDR', '')
-        form_kwargs = super().get_form_kwargs()
-        form_kwargs.update({
-            'topic': self.topic,
-            'forum': self.forum,
-            'user': self.user,
-            'ip': ip,
-            'initial': {'body': self.quote} if getattr(self, 'quote', None) else {},
-            'may_create_poll': False,  # Désactiver les sondages pour ce cas
-            'may_edit_topic_slug': False  # Désactiver slug pour ce cas
-        })
-        return form_kwargs
-
-    def form_valid(self, form):
-        body = form.cleaned_data['body']
-        if not self.topic:
-            return HttpResponse("Erreur : aucun topic spécifié", status=400)
-
-        # Créer le post directement
-        self.object = Post(
-            topic=self.topic,
-            user=self.user,
-            body=body,
-            ip=self.request.META.get('REMOTE_ADDR', '')
-        )
-
-        try:
-            self.object.save()
-            self.topic.post_count = self.topic.posts.count()
-            self.topic.save()
-            return HttpResponse("Post ajouté avec succès")
-        except Exception as e:
-            return HttpResponse(f"Erreur lors de l’ajout : {str(e)}", status=500)
-
-    def form_invalid(self, form):
-        return HttpResponse(f"Erreur : formulaire invalide - {form.errors}", status=400)
-
-    def get(self, request, *args, **kwargs):
-        return HttpResponse("Utilisez POST pour ajouter un message", status=405)
-
-    def get_context_data(self, **kwargs):
-        ctx = super().get_context_data(**kwargs)
-        ctx['forum'] = self.forum
-        ctx['topic'] = self.topic
-        return ctx
-
-    def get_success_url(self):
-        if (not self.request.user.is_authenticated) and defaults.PYBB_PREMODERATION:
-            return reverse('pybb:index')
-        return self.object.get_absolute_url()
 
 class EditPostView(PostEditMixin, generic.UpdateView):
 

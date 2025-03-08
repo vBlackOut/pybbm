@@ -518,8 +518,7 @@ class AddPostView(PostEditMixin, generic.CreateView):
             if defaults.PYBB_ENABLE_ANONYMOUS_POST:
                 self.user, new = User.objects.get_or_create(**{username_field: defaults.PYBB_ANONYMOUS_USERNAME})
             else:
-                from django.contrib.auth.views import redirect_to_login
-                return redirect_to_login(request.get_full_path())
+                return HttpResponse("Utilisateur non authentifié", status=403)
 
         self.forum = None
         self.topic = None
@@ -547,97 +546,48 @@ class AddPostView(PostEditMixin, generic.CreateView):
 
                 if self.quote and request.headers.get('x-requested-with') == 'XMLHttpRequest':
                     return HttpResponse(self.quote)
-        return super(AddPostView, self).dispatch(request, *args, **kwargs)
+        return super().dispatch(request, *args, **kwargs)
 
     def get_form_kwargs(self):
         ip = self.request.META.get('REMOTE_ADDR', '')
         form_kwargs = super().get_form_kwargs()
-        form_kwargs.update(dict(topic=self.topic, forum=self.forum, user=self.user,
-                               ip=ip, initial={}))
-        if getattr(self, 'quote', None):
-            form_kwargs['initial']['body'] = self.quote
-        if defaults.PYBB_ENABLE_ADMIN_POST_FORM and perms.may_post_as_admin(self.user):
-            form_kwargs['initial']['login'] = getattr(self.user, username_field)
-        form_kwargs['may_create_poll'] = perms.may_create_poll(self.user)
-        form_kwargs['may_edit_topic_slug'] = perms.may_edit_topic_slug(self.user)
+        form_kwargs.update({
+            'topic': self.topic,
+            'forum': self.forum,
+            'user': self.user,
+            'ip': ip,
+            'initial': {'body': self.quote} if getattr(self, 'quote', None) else {},
+            'may_create_poll': False,  # Désactiver les sondages pour ce cas
+            'may_edit_topic_slug': False  # Désactiver slug pour ce cas
+        })
         return form_kwargs
 
     def form_valid(self, form):
-        # Créer le post manuellement au lieu de dépendre de form.save()
         body = form.cleaned_data['body']
-        if self.topic:
-            topic = self.topic
-        elif self.forum:
-            topic = Topic.objects.create(
-                forum=self.forum,
-                name=form.cleaned_data.get('name', 'New Topic'),
-                user=self.user
-            )
-        else:
-            raise Http404("Ni topic ni forum spécifié")
+        if not self.topic:
+            return HttpResponse("Erreur : aucun topic spécifié", status=400)
 
+        # Créer le post directement
         self.object = Post(
-            topic=topic,
+            topic=self.topic,
             user=self.user,
             body=body,
             ip=self.request.META.get('REMOTE_ADDR', '')
         )
 
-        # Gestion des attachements et sondages
-        success = True
-        save_attachments = False
-        save_poll_answers = False
+        try:
+            self.object.save()
+            self.topic.post_count = self.topic.posts.count()
+            self.topic.save()
+            return HttpResponse("Post ajouté avec succès")
+        except Exception as e:
+            return HttpResponse(f"Erreur lors de l’ajout : {str(e)}", status=500)
 
-        if perms.may_attach_files(self.user):
-            aformset = self.get_attachment_formset_class()(
-                self.request.POST, self.request.FILES, instance=self.object
-            )
-            if aformset.is_valid():
-                save_attachments = True
-            else:
-                success = False
-        else:
-            aformset = None
+    def form_invalid(self, form):
+        return HttpResponse(f"Erreur : formulaire invalide - {form.errors}", status=400)
 
-        if perms.may_create_poll(self.user):
-            pollformset = self.get_poll_answer_formset_class()()
-            if getattr(self, 'forum', None) or topic.head == self.object:
-                if topic.poll_type != Topic.POLL_TYPE_NONE:
-                    pollformset = self.get_poll_answer_formset_class()(
-                        self.request.POST, instance=topic
-                    )
-                    if pollformset.is_valid():
-                        save_poll_answers = True
-                    else:
-                        success = False
-                else:
-                    topic.poll_question = None
-                    if topic.pk:
-                        topic.poll_answers.all().delete()
-        else:
-            pollformset = None
-
-        if success:
-            try:
-                topic.save()
-            except ValidationError as e:
-                success = False
-                errors = form._errors.setdefault('name', ErrorList())
-                errors += e.error_list
-            else:
-                self.object.save()
-                if save_attachments:
-                    aformset.save()
-                    if self.object.attachments.count():
-                        self.object.save()
-                if save_poll_answers:
-                    pollformset.save()
-                topic.post_count = topic.posts.count()
-                topic.save()
-                return HttpResponseRedirect(self.get_success_url())
-        return self.render_to_response(self.get_context_data(form=form,
-                                                             aformset=aformset,
-                                                             pollformset=pollformset))
+    def get(self, request, *args, **kwargs):
+        return HttpResponse("Utilisez POST pour ajouter un message", status=405)
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)

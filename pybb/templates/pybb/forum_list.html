@@ -64,7 +64,7 @@
             text-overflow: ellipsis;
         }
         .forum-unread .topic-icon i {
-            color: #dc3545; /* Rouge pour les forums non lus */
+            color: #dc3545;
         }
     </style>
 </head>
@@ -91,50 +91,54 @@
                 <div class="card-header bg-custom text-white">Sujets de Discussion</div>
                 <div class="card-body">
                     {% if forum_list %}
-                        {% for category in categories %}
-                            <table class="table table-striped table-hover {% if category %}category-table{% endif %}">
-                                <thead class="border-bottom">
-                                    <tr>
-                                        <th colspan="2" style="font-size: .875rem;text-transform: uppercase;letter-spacing: .0625em">{{ category.name }}</th>
-                                        <th style="font-size: .875rem;text-transform: uppercase;letter-spacing: .0625em">{% trans 'Topics' %}</th>
-                                        <th style="font-size: .875rem;text-transform: uppercase;letter-spacing: .0625em">{% trans 'Posts' %}</th>
-                                        <th style="font-size: .875rem;text-transform: uppercase;letter-spacing: .0625em">{% trans 'Last posts' %}</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for forum in category.forum_set.all|pybb_forum_unread:user %}
-                                        <tr class="forum-row">
-                                            <td class="topic-icon {% if forum.unread %}forum-unread{% endif %}">
-                                                <i class="bi {% if forum.unread %}bi-chat-left-text{% else %}bi-chat-square{% endif %} fs-4"></i>
-                                            </td>
-                                            <td class="topic-title">
-                                                <a class="fw-semibold text-truncate d-block" href="{{ forum.get_absolute_url }}">{{ forum.name }}</a>
-                                                {% if forum.hidden %}<span>[{% trans 'Hidden' %}]</span>{% endif %}
-                                                <div class="fs-sm text-muted">{{ forum.description|safe }}</div>
-                                            </td>
-                                            <td class="forum-topic-count">
-                                                <a class="fw-semibold" href="{{ forum.get_absolute_url }}">{{ forum.topic_count }}</a>
-                                            </td>
-                                            <td class="forum-post-count">
-                                                <a class="fw-semibold" href="{{ forum.get_absolute_url }}">{{ forum.post_count }}</a>
-                                            </td>
-                                            <td class="forum-last-post">
-                                                {% include "pybb/forum_last_update_info.html" %}
-                                            </td>
-                                        </tr>
-                                    {% empty %}
-                                        <tr>
-                                            <td colspan="5">
-                                                <h3>{% trans 'No forums created' %}</h3>
-                                                {% if user.is_staff %}
-                                                    <a href="{% url 'admin:pybb_forum_add' %}">{% trans 'Add forum now' %}</a>
-                                                {% endif %}
-                                            </td>
-                                        </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                        {% endfor %}
+                        <table class="table table-striped table-hover {% if category %}category-table{% elif parent_forum %}child-forums-table{% endif %}">
+                            <thead class="border-bottom">
+                                <tr>
+                                    <th colspan="2" style="font-size: .875rem;text-transform: uppercase;letter-spacing: .0625em">{% trans 'Forum' %}</th>
+                                    <th style="font-size: .875rem;text-transform: uppercase;letter-spacing: .0625em">{% trans 'Topics' %}</th>
+                                    <th style="font-size: .875rem;text-transform: uppercase;letter-spacing: .0625em">{% trans 'Posts' %}</th>
+                                    <th style="font-size: .875rem;text-transform: uppercase;letter-spacing: .0625em">{% trans 'Last posts' %}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% with forums=forum_list|pybb_forum_unread:user %}
+                                    {% if forums %}
+                                        {% for forum in forums %}
+                                            <tr class="forum-row">
+                                                <td class="topic-icon {% if forum.unread %}forum-unread{% endif %}">
+                                                    <i class="bi {% if forum.unread %}bi-chat-left-text{% else %}bi-chat-square{% endif %} fs-4"></i>
+                                                </td>
+                                                <td class="topic-title {% if forum.unread %}forum-unread{% endif %}">
+                                                    <a class="fw-semibold text-truncate d-block" href="{{ forum.get_absolute_url }}">{{ forum.name }}</a>
+                                                    {% if forum.hidden %}<span>[{% trans 'Hidden' %}]</span>{% endif %}
+                                                    <div class="fs-sm text-muted">{{ forum.description|safe }}</div>
+                                                </td>
+                                                <td class="forum-topic-count">
+                                                    <a class="fw-semibold" href="{{ forum.get_absolute_url }}">{{ forum.topic_count }}</a>
+                                                </td>
+                                                <td class="forum-post-count">
+                                                    <a class="fw-semibold" href="{{ forum.get_absolute_url }}">{{ forum.post_count }}</a>
+                                                </td>
+                                                <td class="forum-last-post">
+                                                    {% include "pybb/forum_last_update_info.html" %}
+                                                </td>
+                                            </tr>
+                                        {% endfor %}
+                                    {% else %}
+                                        {% if category %}
+                                            <tr>
+                                                <td colspan="5">
+                                                    <h3>{% trans 'No forums created' %}</h3>
+                                                    {% if user.is_staff %}
+                                                        <a href="{% url 'admin:pybb_forum_add' %}">{% trans 'Add forum now' %}</a>
+                                                    {% endif %}
+                                                </td>
+                                            </tr>
+                                        {% endif %}
+                                    {% endif %}
+                                {% endwith %}
+                            </tbody>
+                        </table>
                     {% else %}
                         <div class="text-center">
                             <h3>{% trans 'No forums created' %}</h3>

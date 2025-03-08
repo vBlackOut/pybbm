@@ -8,21 +8,10 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css">
     <style>
-        body {
-            background-color: #f8f9fa;
-            color: #212529;
-        }
-        .bg-custom {
-            background-color: #343a40;
-            color: #ffffff;
-        }
-        .card {
-            border-color: #dee2e6;
-        }
-        .controls {
-            margin-top: 20px;
-            text-align: center;
-        }
+        body { background-color: #f8f9fa; color: #212529; }
+        .bg-custom { background-color: #343a40; color: #ffffff; }
+        .card { border-color: #dee2e6; }
+        .controls { margin-top: 20px; text-align: center; }
     </style>
 </head>
 <body>
@@ -52,6 +41,13 @@
                             {{ forum.headline|safe }}
                         </div>
                     {% endif %}
+
+                    <!-- Débogage -->
+                    <h3>Débogage</h3>
+                    <p>Forum: {{ forum.name }}</p>
+                    <p>Catégorie: {{ forum.category.name }}</p>
+                    <p>Sous-forums (forums_accessed): {{ forum.forums_accessed|length }} - {{ forum.forums_accessed|default:"Aucun" }}</p>
+                    <p>Topics: {{ topic_list|length }} - {{ topic_list|default:"Aucun" }}</p>
 
                     {% include "pybb/pagination.html" %}
 

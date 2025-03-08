@@ -25,7 +25,7 @@ from pybb.models import Category, Forum, ForumSubscription, Topic, Post, TopicRe
     ForumReadTracker, PollAnswerUser
 from pybb.permissions import perms
 from pybb.templatetags.pybb_tags import pybb_topic_poll_not_voted
-
+from django.views.generic import CreateView
 
 User = compat.get_user_model()
 username_field = compat.get_username_field()

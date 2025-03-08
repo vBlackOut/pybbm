@@ -253,7 +253,7 @@ def load_perms_filters():
             continue  # pragma: no cover - only methods are used to dynamically build templatetags
         if not method_name.startswith('may') and not method_name.startswith('filter'):
             continue  # pragma: no cover - only (may|filter)* methods are used to dynamically build templatetags
-        method_args = inspect.getargspec(method).args
+        method_args = list(inspect.signature(method).parameters.keys())
         args_count = len(method_args)
         if args_count not in (2, 3):
             continue  # pragma: no cover - only methods with 2 or 3 params

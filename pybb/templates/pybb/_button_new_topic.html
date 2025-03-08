@@ -1,1 +1,5 @@
-{% load i18n %}<a href="{% url 'pybb:add_topic' forum.id %}" class="new-topic btn btn-primary">{% trans 'New topic' %}</a>
+{% load i18n %}
+<form method="post" action="{% url 'pybb:add_topic' forum.id %}" class="d-inline">
+    {% csrf_token %}
+    <button type="submit" class="new-topic btn btn-primary">{% trans 'New topic' %}</button>
+</form>

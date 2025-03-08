@@ -15,6 +15,7 @@
                     <tr class="topic-row {% if topic.sticky %}table-primary{% endif %} {% if topic.unread %}table-warning{% endif %}">
                         <td class="topic-name">
                             <a href="{{ topic.get_absolute_url }}" class="fw-semibold text-truncate d-block">{{ topic.name|truncatewords:10 }}</a>
+                            <small class="text-muted">(URL: {{ topic.get_absolute_url }})</small>
                             {% if topic.sticky %}<span class="badge bg-success ms-2">{% trans 'Sticky' %}</span>{% endif %}
                             {% if topic.closed %}<span class="badge bg-danger ms-2">{% trans 'Closed' %}</span>{% endif %}
                             {% with topic|pybb_topic_inline_pagination as pages %}

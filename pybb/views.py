@@ -507,46 +507,54 @@ class PostEditMixin(PybbFormsMixin):
                                                              aformset=aformset,
                                                              pollformset=pollformset))
 
-class AddPostView(PostEditMixin, generic.CreateView):
-    template_name = 'pybb/add_post.html'
+class AddPostView(CreateView):
+    form_class = PostForm  # Forcer l'utilisation de PostForm
 
     @method_decorator(csrf_protect)
     def dispatch(self, request, *args, **kwargs):
-        if request.user.is_authenticated:
-            self.user = request.user
-        else:
-            if defaults.PYBB_ENABLE_ANONYMOUS_POST:
-                self.user, new = User.objects.get_or_create(**{username_field: defaults.PYBB_ANONYMOUS_USERNAME})
-            else:
-                return HttpResponse("Utilisateur non authentifié", status=403)
+        if not request.user.is_authenticated:
+            return HttpResponse("Utilisateur non authentifié", status=403)
+        self.user = request.user
+        print(f"Utilisateur: {self.user.username}, is_authenticated: {self.user.is_authenticated}")
 
-        self.forum = None
-        self.topic = None
-        if 'forum_id' in kwargs:
-            self.forum = get_object_or_404(perms.filter_forums(request.user, Forum.objects.all()), pk=kwargs['forum_id'])
-            if not perms.may_create_topic(self.user, self.forum):
-                raise PermissionDenied
-        elif 'topic_id' in kwargs:
-            self.topic = get_object_or_404(perms.filter_topics(request.user, Topic.objects.all()), pk=kwargs['topic_id'])
-            if not perms.may_create_post(self.user, self.topic):
-                raise PermissionDenied
-
-            self.quote = ''
-            if 'quote_id' in request.GET:
-                try:
-                    quote_id = int(request.GET.get('quote_id'))
-                except TypeError:
-                    raise Http404
-                else:
-                    post = get_object_or_404(Post, pk=quote_id)
-                    if not perms.may_view_post(request.user, post):
-                        raise PermissionDenied
-                    profile = util.get_pybb_profile(post.user)
-                    self.quote = util._get_markup_quoter(defaults.PYBB_MARKUP)(post.body, profile.get_display_name())
-
-                if self.quote and request.headers.get('x-requested-with') == 'XMLHttpRequest':
-                    return HttpResponse(self.quote)
+        self.topic = get_object_or_404(perms.filter_topics(request.user, Topic.objects.all()), pk=kwargs['topic_id'])
+        if not perms.may_create_post(self.user, self.topic):
+            raise PermissionDenied
         return super().dispatch(request, *args, **kwargs)
+
+    def get_form_kwargs(self):
+        ip = self.request.META.get('REMOTE_ADDR', '')
+        form_kwargs = {
+            'topic': self.topic,
+            'user': self.user,
+            'ip': ip,
+            'may_create_poll': False,
+            'may_edit_topic_slug': False
+        }
+        print(f"Form kwargs - user: {form_kwargs['user']}, is_authenticated: {form_kwargs['user'].is_authenticated}")
+        return form_kwargs
+
+    def form_valid(self, form):
+        body = form.cleaned_data['body']
+        self.object = Post(
+            topic=self.topic,
+            user=self.user,
+            body=body,
+            ip=self.request.META.get('REMOTE_ADDR', '')
+        )
+        try:
+            self.object.save()
+            self.topic.post_count = self.topic.posts.count()
+            self.topic.save()
+            return HttpResponse("Post ajouté avec succès")
+        except Exception as e:
+            return HttpResponse(f"Erreur lors de l’ajout : {str(e)}", status=500)
+
+    def form_invalid(self, form):
+        return HttpResponse(f"Erreur : formulaire invalide - {form.errors}", status=400)
+
+    def get(self, request, *args, **kwargs):
+        return HttpResponse("Utilisez POST pour ajouter un message", status=405)
 
     def get_form_kwargs(self):
         ip = self.request.META.get('REMOTE_ADDR', '')

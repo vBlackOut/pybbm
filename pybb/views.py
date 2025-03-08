@@ -320,36 +320,50 @@ class TopicView(RedirectToLoginMixin, PaginatorMixin, PybbFormsMixin, generic.Li
 
     def get_context_data(self, **kwargs):
         ctx = super(TopicView, self).get_context_data(**kwargs)
-
-        if self.request.user.is_authenticated:
-            self.request.user.is_moderator = perms.may_moderate_topic(self.request.user, self.topic)
-            self.request.user.is_subscribed = self.request.user in self.topic.subscribers.all()
-            if defaults.PYBB_ENABLE_ADMIN_POST_FORM and \
-                    perms.may_post_as_admin(self.request.user):
-                ctx['form'] = self.get_admin_post_form_class()(
-                    initial={'login': getattr(self.request.user, username_field)},
-                    topic=self.topic)
-            else:
-                ctx['form'] = self.get_post_form_class()(topic=self.topic)
-        elif defaults.PYBB_ENABLE_ANONYMOUS_POST:
-            ctx['form'] = self.get_post_form_class()(topic=self.topic)
-        else:
-            ctx['form'] = None
-            ctx['next'] = self.get_login_redirect_url()
-        if perms.may_attach_files(self.request.user):
-            aformset = self.get_attachment_formset_class()()
-            ctx['aformset'] = aformset
-            ctx['attachment_max_size'] = defaults.PYBB_ATTACHMENT_SIZE_LIMIT
-        if defaults.PYBB_FREEZE_FIRST_POST:
-            ctx['first_post'] = self.topic.head
-        else:
+    
+        # Ajouter le flag topic_does_not_exist au contexte
+        ctx['topic_does_not_exist'] = getattr(self, 'topic_does_not_exist', False)
+    
+        # Si le topic n’existe pas ou n’a pas de forum, ajuster le contexte
+        if ctx['topic_does_not_exist'] or not self.topic.forum:
+            ctx['form'] = None  # Pas de formulaire si le topic n’existe pas
             ctx['first_post'] = None
-        ctx['topic'] = self.topic
-
-        if perms.may_vote_in_topic(self.request.user, self.topic) and \
-                pybb_topic_poll_not_voted(self.topic, self.request.user):
-            ctx['poll_form'] = self.get_poll_form_class()(self.topic)
-
+            ctx['topic'] = self.topic  # Toujours passer le topic (même fictif)
+            ctx['post_list'] = []  # Pas de posts à afficher
+        else:
+            # Cas où le topic existe
+            if self.request.user.is_authenticated:
+                self.request.user.is_moderator = perms.may_moderate_topic(self.request.user, self.topic)
+                self.request.user.is_subscribed = self.request.user in self.topic.subscribers.all()
+                if defaults.PYBB_ENABLE_ADMIN_POST_FORM and perms.may_post_as_admin(self.request.user):
+                    ctx['form'] = self.get_admin_post_form_class()(
+                        initial={'login': getattr(self.request.user, username_field)},
+                        topic=self.topic
+                    )
+                else:
+                    ctx['form'] = self.get_post_form_class()(topic=self.topic)
+            elif defaults.PYBB_ENABLE_ANONYMOUS_POST:
+                ctx['form'] = self.get_post_form_class()(topic=self.topic)
+            else:
+                ctx['form'] = None
+                ctx['next'] = self.get_login_redirect_url()
+    
+            if perms.may_attach_files(self.request.user):
+                aformset = self.get_attachment_formset_class()()
+                ctx['aformset'] = aformset
+                ctx['attachment_max_size'] = defaults.PYBB_ATTACHMENT_SIZE_LIMIT
+    
+            if defaults.PYBB_FREEZE_FIRST_POST:
+                ctx['first_post'] = self.topic.head if self.topic.post_count > 0 else None
+            else:
+                ctx['first_post'] = None
+    
+            ctx['topic'] = self.topic
+    
+            if perms.may_vote_in_topic(self.request.user, self.topic) and \
+                    pybb_topic_poll_not_voted(self.topic, self.request.user):
+                ctx['poll_form'] = self.get_poll_form_class()(self.topic)
+    
         return ctx
 
     @method_decorator(get_atomic_func())
@@ -385,15 +399,23 @@ class TopicView(RedirectToLoginMixin, PaginatorMixin, PybbFormsMixin, generic.Li
 
     def get_topic(self, **kwargs):
         if 'pk' in kwargs:
-            topic = get_object_or_404(Topic, pk=kwargs['pk'], post_count__gt=0)
-        elif ('slug'and 'forum_slug'and 'category_slug') in kwargs:
+            try:
+                # On supprime la condition post_count__gt=0
+                topic = Topic.objects.get(pk=kwargs['pk'])
+                print(f"Topic trouvé: ID: {topic.id}, Name: {topic.name}, Post Count: {topic.post_count}")
+            except Topic.DoesNotExist:
+                print(f"Aucun topic trouvé pour pk={kwargs['pk']}")
+                # Créer un objet "vide" pour éviter le 404
+                topic = Topic(id=kwargs['pk'], name="Topic inexistant", slug="inexistant", forum=None, post_count=0)
+                self.topic_does_not_exist = True  # Flag pour le template
+            return topic
+        elif ('slug' and 'forum_slug' and 'category_slug') in kwargs:
             topic = get_object_or_404(
                 Topic,
                 slug=kwargs['slug'],
                 forum__slug=kwargs['forum_slug'],
-                forum__category__slug=kwargs['category_slug'],
-                post_count__gt=0
-                )
+                forum__category__slug=kwargs['category_slug']
+            )
         else:
             raise Http404(_('This topic does not exists'))
         return topic

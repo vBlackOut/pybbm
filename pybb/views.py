@@ -552,7 +552,6 @@ class AddPostView(CreateView):
             self.topic.post_count = self.topic.posts.count()
             self.topic.save()
             print(f"form_valid - Post sauvegardé: {self.object.id}")
-            # Rediriger vers la page du topic
             return redirect(self.topic.get_absolute_url())
         except Exception as e:
             print(f"form_valid - Erreur sauvegarde: {str(e)}")

@@ -1,36 +1,75 @@
-{% extends 'pybb/base.html' %}
 {% load pybb_tags i18n %}
-
-{% block title %}{{ forum.name }}{% endblock title %}
-
-{% block breadcrumb %}
-    {% with forum as object %}
-        {% include "pybb/breadcrumb.html" %}
-    {% endwith %}
-{% endblock %}
-
-{% block content %}
-    <div class="forum">
-        <h1>{{ forum.name }}</h1>
-        {% if forum.headline %}
-            <div class="forum-headline alert alert-block">
-                {{ forum.headline|safe }}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ forum.name }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css">
+    <style>
+        body {
+            background-color: #f8f9fa;
+            color: #212529;
+        }
+        .bg-custom {
+            background-color: #343a40;
+            color: #ffffff;
+        }
+        .card {
+            border-color: #dee2e6;
+        }
+        .controls {
+            margin-top: 20px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <main id="main-container">
+        <div class="bg-custom py-3">
+            <div class="container d-flex justify-content-between align-items-center">
+                <div class="d-flex align-items-center">
+                    <i class="bi bi-chat-dots-fill fs-2 me-2"></i>
+                    <h1 class="h3 fw-bold mb-0">{{ forum.name }}</h1>
+                </div>
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb breadcrumb-alt text-white">
+                        <li class="breadcrumb-item">
+                            <a class="text-light" href="{% url 'pybb:index' %}">Forum</a>
+                        </li>
+                        <li class="breadcrumb-item active text-light" aria-current="page">{{ forum.name }}</li>
+                    </ol>
+                </nav>
             </div>
-        {% endif %}
-
-        {% include "pybb/pagination.html" %}
-
-        {% include 'pybb/forum_list.html' with forum_list=forum.forums_accessed category='' parent_forum=forum %}
-
-        {% include "pybb/topic_list.html" %}
-
-        {% include "pybb/pagination.html" %}
-
-        <div class="controls">
-            {% if user|pybb_may_create_topic:forum %}
-                {% include "pybb/_button_new_topic.html" %}
-            {% endif %}
-            {% include "pybb/_button_forum_subscription.html" %}
         </div>
-    </div>
-{% endblock content %}
+        <div class="container mt-4">
+            <div class="card">
+                <div class="card-header bg-custom text-white">Détails du Forum</div>
+                <div class="card-body">
+                    {% if forum.headline %}
+                        <div class="forum-headline alert alert-info">
+                            {{ forum.headline|safe }}
+                        </div>
+                    {% endif %}
+
+                    {% include "pybb/pagination.html" %}
+
+                    {% include 'pybb/forum_list.html' with forum_list=forum.forums_accessed category='' parent_forum=forum %}
+
+                    {% include "pybb/topic_list.html" %}
+
+                    {% include "pybb/pagination.html" %}
+
+                    <div class="controls">
+                        {# Suppression temporaire de pybb_may_create_topic #}
+                        {% include "pybb/_button_new_topic.html" %}
+                        {% include "pybb/_button_forum_subscription.html" %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

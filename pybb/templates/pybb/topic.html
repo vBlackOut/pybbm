@@ -59,7 +59,29 @@
                     {% endif %}
 
                     {% include "pybb/pagination.html" %}
-
+                    
+                    {% if user.is_authenticated and topic.forum %}
+                        <div class="controls">
+                            {% if user.is_moderator %}
+                                {% if topic.sticky %}
+                                    <a href="{% url 'pybb:unstick_topic' topic.id %}" class="btn btn-sm btn-outline-secondary me-2">{% trans 'Unstick topic' %}</a>
+                                {% else %}
+                                    <a href="{% url 'pybb:stick_topic' topic.id %}" class="btn btn-sm btn-outline-secondary me-2">{% trans 'Stick topic' %}</a>
+                                {% endif %}
+                                {% if topic.closed %}
+                                    <a href="{% url 'pybb:open_topic' topic.id %}" class="btn btn-sm btn-outline-secondary me-2">{% trans 'Open topic' %}</a>
+                                {% else %}
+                                    <a href="{% url 'pybb:close_topic' topic.id %}" class="btn btn-sm btn-outline-secondary me-2">{% trans 'Close topic' %}</a>
+                                {% endif %}
+                            {% endif %}
+                            {% if user.is_subscribed %}
+                                <a href="{% url 'pybb:delete_subscription' topic.id %}?from_topic" class="btn btn-sm btn-outline-secondary me-2">{% trans 'Unsubscribe' %}</a>
+                            {% else %}
+                                <a href="{% url 'pybb:add_subscription' topic.id %}" class="btn btn-sm btn-outline-secondary me-2">{% trans 'Subscribe' %}</a>
+                            {% endif %}
+                        </div>
+                    {% endif %}
+                    
                     {% if post_list %}
                         <div class="messages">
                             {% for post in post_list %}
@@ -83,26 +105,6 @@
                     {% include "pybb/pagination.html" %}
 
                     {% if user.is_authenticated and topic.forum %}
-                        <div class="controls">
-                            {% if user.is_moderator %}
-                                {% if topic.sticky %}
-                                    <a href="{% url 'pybb:unstick_topic' topic.id %}" class="btn btn-sm btn-outline-secondary me-2">{% trans 'Unstick topic' %}</a>
-                                {% else %}
-                                    <a href="{% url 'pybb:stick_topic' topic.id %}" class="btn btn-sm btn-outline-secondary me-2">{% trans 'Stick topic' %}</a>
-                                {% endif %}
-                                {% if topic.closed %}
-                                    <a href="{% url 'pybb:open_topic' topic.id %}" class="btn btn-sm btn-outline-secondary me-2">{% trans 'Open topic' %}</a>
-                                {% else %}
-                                    <a href="{% url 'pybb:close_topic' topic.id %}" class="btn btn-sm btn-outline-secondary me-2">{% trans 'Close topic' %}</a>
-                                {% endif %}
-                            {% endif %}
-                            {% if user.is_subscribed %}
-                                <a href="{% url 'pybb:delete_subscription' topic.id %}?from_topic" class="btn btn-sm btn-outline-secondary me-2">{% trans 'Unsubscribe' %}</a>
-                            {% else %}
-                                <a href="{% url 'pybb:add_subscription' topic.id %}" class="btn btn-sm btn-outline-secondary me-2">{% trans 'Subscribe' %}</a>
-                            {% endif %}
-                        </div>
-
                         <div class="form-container">
                             <form method="post" action="{% url 'pybb:add_post' topic.pk %}" class="d-flex">
                                 {% csrf_token %}

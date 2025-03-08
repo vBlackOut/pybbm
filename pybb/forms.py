@@ -56,81 +56,80 @@ PollAnswerFormSet = inlineformset_factory(Topic, PollAnswer, extra=2, max_num=de
 
 
 class PostForm(forms.ModelForm):
-    class Meta:
+    name = forms.CharField(label=gettext_lazy('Subject'))
+    poll_type = forms.TypedChoiceField(label=gettext_lazy('Poll type'), choices=Topic.POLL_TYPE_CHOICES, coerce=int)
+    poll_question = forms.CharField(
+        label=gettext_lazy('Poll question'),
+        required=False,
+        widget=forms.Textarea(attrs={'class': 'no-markitup'}))
+    slug = forms.CharField(label=gettext_lazy('Topic slug'), required=False)
+
+    class Meta(object):
         model = Post
-        fields = ['body']  # Seulement 'body' est attendu dans les données POST
+        fields = ('body',)
         widgets = {
             'body': util.get_markup_engine().get_widget_cls(),
         }
 
     def __init__(self, *args, **kwargs):
-        self.user = kwargs.pop('user', None)
+        self.request = kwargs.pop('request', None)  # Récupérer request depuis kwargs
         self.ip = kwargs.pop('ip', None)
         self.topic = kwargs.pop('topic', None)
         self.forum = kwargs.pop('forum', None)
-        self.may_create_poll = kwargs.pop('may_create_poll', False)
+        self.may_create_poll = kwargs.pop('may_create_poll', True)
         self.may_edit_topic_slug = kwargs.pop('may_edit_topic_slug', False)
-        print(f"PostForm init - user: {self.user}, topic: {self.topic.id if self.topic else None}, forum: {self.forum}")
-        super().__init__(*args, **kwargs)
+        if not (self.topic or self.forum or ('instance' in kwargs)):
+            raise ValueError('You should provide topic, forum or instance')
+        if kwargs.get('instance', None) and (kwargs['instance'].topic.head == kwargs['instance']):
+            kwargs.setdefault('initial', {})['name'] = kwargs['instance'].topic.name
+            kwargs.setdefault('initial', {})['poll_type'] = kwargs['instance'].topic.poll_type
+            kwargs.setdefault('initial', {})['poll_question'] = kwargs['instance'].topic.poll_question
 
-        # Ne pas ajouter de champs dynamiques sauf si explicitement requis
-        if self.forum and self.may_edit_topic_slug:
-            self.fields['name'] = forms.CharField(required=True, label=_('Subject'))
-            self.fields['slug'] = forms.CharField(required=False, label=_('Topic slug'))
-        elif self.topic and self.instance.pk and self.instance.topic.head == self.instance and self.may_edit_topic_slug:
-            self.fields['name'] = forms.CharField(required=True, initial=self.topic.name, label=_('Subject'))
-            self.fields['slug'] = forms.CharField(required=False, initial=self.topic.slug, label=_('Topic slug'))
-        if self.may_create_poll:
-            self.fields['poll_type'] = forms.TypedChoiceField(
-                label=_('Poll type'),
-                choices=Topic.POLL_TYPE_CHOICES,
-                coerce=int,
-                initial=Topic.POLL_TYPE_NONE,
-                required=False
-            )
-            self.fields['poll_question'] = forms.CharField(
-                label=_('Poll question'),
-                required=False,
-                widget=forms.Textarea(attrs={'class': 'no-markitup'})
-            )
+        super(PostForm, self).__init__(**kwargs)
+
+        # remove topic specific fields
+        if not (self.forum or (self.instance.pk and (self.instance.topic.head == self.instance))):
+            del self.fields['name']
+            del self.fields['poll_type']
+            del self.fields['poll_question']
+            del self.fields['slug']
+        else:
+            if not self.may_create_poll:
+                del self.fields['poll_type']
+                del self.fields['poll_question']
+            if not self.may_edit_topic_slug:
+                del self.fields['slug']
 
         self.available_smiles = defaults.PYBB_SMILES
         self.smiles_prefix = defaults.PYBB_SMILES_PREFIX
+        print(f"PostForm init - request.user: {self.request.user if self.request else 'None'}")
 
     def clean_body(self):
         body = self.cleaned_data['body']
-        user = self.user or self.instance.user
-        print(f"Cleaning body: {body}, user: {user}")
+        user = self.request.user if self.request else self.instance.user
         if defaults.PYBB_BODY_VALIDATOR:
-            try:
-                defaults.PYBB_BODY_VALIDATOR(user, body)
-            except forms.ValidationError as e:
-                print(f"Body validator failed: {e}")
-                raise
+            defaults.PYBB_BODY_VALIDATOR(user, body)
         for cleaner in defaults.PYBB_BODY_CLEANERS:
-            try:
-                body = util.get_body_cleaner(cleaner)(user, body)
-            except Exception as e:
-                print(f"Body cleaner failed: {e}")
-                raise forms.ValidationError(f"Erreur dans le cleaner : {e}")
+            body = util.get_body_cleaner(cleaner)(user, body)
         return body
 
     def clean(self):
-        cleaned_data = super().clean()
-        print(f"Cleaned data: {cleaned_data}")
-        return cleaned_data
+        poll_type = self.cleaned_data.get('poll_type', None)
+        poll_question = self.cleaned_data.get('poll_question', None)
+        if poll_type is not None and poll_type != Topic.POLL_TYPE_NONE and not poll_question:
+            raise forms.ValidationError(gettext('Poll''s question is required when adding a poll'))
+        return self.cleaned_data
 
     def save(self, commit=True):
         if self.instance.pk:
-            # Cas d'édition
-            post = super().save(commit=False)
-            if self.user:
-                post.user = self.user
-            if post.topic.head == post and self.may_edit_topic_slug:
-                post.topic.name = self.cleaned_data.get('name', post.topic.name)
+            post = super(PostForm, self).save(commit=False)
+            if self.request:
+                post.user = self.request.user  # Récupérer l'utilisateur depuis request.user
+            if post.topic.head == post:
+                post.topic.name = self.cleaned_data['name']
                 if self.may_create_poll:
-                    post.topic.poll_type = self.cleaned_data.get('poll_type', post.topic.poll_type)
-                    post.topic.poll_question = self.cleaned_data.get('poll_question', post.topic.poll_question)
+                    post.topic.poll_type = self.cleaned_data['poll_type']
+                    post.topic.poll_question = self.cleaned_data['poll_question']
                 post.topic.updated = tznow()
                 if commit:
                     post.topic.save()
@@ -139,25 +138,33 @@ class PostForm(forms.ModelForm):
                 post.save()
             return post, post.topic
 
-        # Cas de création
         allow_post = True
-        if defaults.PYBB_PREMODERATION:
-            allow_post = defaults.PYBB_PREMODERATION(self.user, self.cleaned_data['body'])
-
-        topic = self.topic  # Utiliser le topic passé par AddPostView
+        if defaults.PYBB_PREMODERATION and self.request:
+            allow_post = defaults.PYBB_PREMODERATION(self.request.user, self.cleaned_data['body'])
+        if self.forum:
+            topic = Topic(
+                forum=self.forum,
+                user=self.request.user if self.request else None,
+                name=self.cleaned_data['name'],
+                poll_type=self.cleaned_data.get('poll_type', Topic.POLL_TYPE_NONE),
+                poll_question=self.cleaned_data.get('poll_question', None),
+                slug=self.cleaned_data.get('slug', None),
+            )
+            if not allow_post:
+                topic.on_moderation = True
+        else:
+            topic = self.topic
         post = Post(
-            user=self.user,  # Forcer l'utilisateur ici
-            body=self.cleaned_data['body'],
-            user_ip=self.ip if self.ip else '0.0.0.0'
+            user=self.request.user if self.request else None,  # Utiliser request.user
+            user_ip=self.ip,
+            body=self.cleaned_data['body']
         )
         if not allow_post:
             post.on_moderation = True
-
         if commit:
+            topic.save()
             post.topic = topic
             post.save()
-            topic.post_count = topic.posts.count()
-            topic.save()
         return post, topic
 
 class MovePostForm(forms.Form):

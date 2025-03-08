@@ -72,12 +72,13 @@ class PostForm(forms.ModelForm):
         }
 
     def __init__(self, *args, **kwargs):
-        self.request = kwargs.pop('request', None)  # Récupérer request depuis kwargs
+        self.request = kwargs.pop('request', None)
         self.ip = kwargs.pop('ip', None)
         self.topic = kwargs.pop('topic', None)
         self.forum = kwargs.pop('forum', None)
         self.may_create_poll = kwargs.pop('may_create_poll', True)
         self.may_edit_topic_slug = kwargs.pop('may_edit_topic_slug', False)
+        print(f"PostForm init - request.user: {self.request.user if self.request else 'None'}, topic: {self.topic.id if self.topic else None}")
         if not (self.topic or self.forum or ('instance' in kwargs)):
             raise ValueError('You should provide topic, forum or instance')
         if kwargs.get('instance', None) and (kwargs['instance'].topic.head == kwargs['instance']):
@@ -85,9 +86,8 @@ class PostForm(forms.ModelForm):
             kwargs.setdefault('initial', {})['poll_type'] = kwargs['instance'].topic.poll_type
             kwargs.setdefault('initial', {})['poll_question'] = kwargs['instance'].topic.poll_question
 
-        super(PostForm, self).__init__(**kwargs)
+        super(PostForm, self).__init__(*args, **kwargs)
 
-        # remove topic specific fields
         if not (self.forum or (self.instance.pk and (self.instance.topic.head == self.instance))):
             del self.fields['name']
             del self.fields['poll_type']
@@ -99,21 +99,31 @@ class PostForm(forms.ModelForm):
                 del self.fields['poll_question']
             if not self.may_edit_topic_slug:
                 del self.fields['slug']
+        print(f"PostForm init - Champs après init: {list(self.fields.keys())}")
 
         self.available_smiles = defaults.PYBB_SMILES
         self.smiles_prefix = defaults.PYBB_SMILES_PREFIX
-        print(f"PostForm init - request.user: {self.request.user if self.request else 'None'}")
 
     def clean_body(self):
-        body = self.cleaned_data['body']
+        body = self.cleaned_data.get('body', '')
         user = self.request.user if self.request else self.instance.user
+        print(f"clean_body - Body: {body}, user: {user}")
         if defaults.PYBB_BODY_VALIDATOR:
-            defaults.PYBB_BODY_VALIDATOR(user, body)
+            try:
+                defaults.PYBB_BODY_VALIDATOR(user, body)
+            except forms.ValidationError as e:
+                print(f"clean_body - Validator failed: {e}")
+                raise
         for cleaner in defaults.PYBB_BODY_CLEANERS:
-            body = util.get_body_cleaner(cleaner)(user, body)
+            try:
+                body = util.get_body_cleaner(cleaner)(user, body)
+            except Exception as e:
+                print(f"clean_body - Cleaner failed: {e}")
+                raise forms.ValidationError(f"Erreur dans le cleaner : {e}")
         return body
 
     def clean(self):
+        print(f"clean - Données avant validation: {self.cleaned_data}")
         poll_type = self.cleaned_data.get('poll_type', None)
         poll_question = self.cleaned_data.get('poll_question', None)
         if poll_type is not None and poll_type != Topic.POLL_TYPE_NONE and not poll_question:
@@ -124,7 +134,7 @@ class PostForm(forms.ModelForm):
         if self.instance.pk:
             post = super(PostForm, self).save(commit=False)
             if self.request:
-                post.user = self.request.user  # Récupérer l'utilisateur depuis request.user
+                post.user = self.request.user
             if post.topic.head == post:
                 post.topic.name = self.cleaned_data['name']
                 if self.may_create_poll:
@@ -155,7 +165,7 @@ class PostForm(forms.ModelForm):
         else:
             topic = self.topic
         post = Post(
-            user=self.request.user if self.request else None,  # Utiliser request.user
+            user=self.request.user if self.request else None,
             user_ip=self.ip,
             body=self.cleaned_data['body']
         )

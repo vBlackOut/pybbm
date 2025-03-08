@@ -516,22 +516,34 @@ class AddPostView(CreateView):
         self.user = request.user
         print(f"Dispatch - Utilisateur: {self.user.username}, is_authenticated: {self.user.is_authenticated}")
         print(f"Dispatch - POST data: {request.POST}")
-
-        self.topic = get_object_or_404(perms.filter_topics(request.user, Topic.objects.all()), pk=kwargs['topic_id'])
-        if not perms.may_create_post(self.user, self.topic):
-            raise PermissionDenied
+    
+        if 'topic_id' in kwargs:
+            self.topic = get_object_or_404(perms.filter_topics(request.user, Topic.objects.all()), pk=kwargs['topic_id'])
+            if not perms.may_create_post(self.user, self.topic):
+                raise PermissionDenied
+        elif 'forum_id' in kwargs:
+            self.forum = get_object_or_404(perms.filter_forums(request.user, Forum.objects.all()), pk=kwargs['forum_id'])
+            if not perms.may_create_topic(self.user, self.forum):
+                raise PermissionDenied
+            self.topic = None  # Sera créé dans form_valid
+        else:
+            raise Http404("Ni topic_id ni forum_id fourni")
+    
         return super().dispatch(request, *args, **kwargs)
 
     def get_form_kwargs(self):
         ip = self.request.META.get('REMOTE_ADDR', '')
         form_kwargs = {
-            'topic': self.topic,
             'request': self.request,
             'ip': ip,
             'may_create_poll': False,
-            'may_edit_topic_slug': False
+            'may_edit_topic_slug': True if hasattr(self, 'forum') else False
         }
-        print(f"get_form_kwargs - request.user: {form_kwargs['request'].user}, topic: {form_kwargs['topic'].id}")
+        if hasattr(self, 'topic') and self.topic:
+            form_kwargs['topic'] = self.topic
+        elif hasattr(self, 'forum'):
+            form_kwargs['forum'] = self.forum
+        print(f"get_form_kwargs - request.user: {form_kwargs['request'].user}, topic: {form_kwargs.get('topic', 'None')}, forum: {form_kwargs.get('forum', 'None')}")
         return form_kwargs
 
     def post(self, request, *args, **kwargs):
@@ -546,21 +558,28 @@ class AddPostView(CreateView):
         print(f"form_valid - Données validées: {form.cleaned_data}")
         self.object, topic = form.save(commit=False)
         self.object.user = self.request.user
-        self.object.topic = self.topic
+        if hasattr(self, 'topic') and self.topic:
+            self.object.topic = self.topic
+        elif hasattr(self, 'forum'):
+            self.object.topic = topic
+            topic.forum = self.forum
         try:
             self.object.save()
-            self.topic.post_count = self.topic.posts.count()
-            self.topic.save()
+            if hasattr(self, 'forum'):
+                topic.save()
+            else:
+                self.topic.post_count = self.topic.posts.count()
+                self.topic.save()
             print(f"form_valid - Post sauvegardé: {self.object.id}")
-            return redirect(self.topic.get_absolute_url())
+            return redirect(self.object.topic.get_absolute_url())
         except Exception as e:
             print(f"form_valid - Erreur sauvegarde: {str(e)}")
             return HttpResponse(f"Erreur lors de l’ajout : {str(e)}", status=500)
-
-    def form_invalid(self, form):
-        print(f"form_invalid - Erreurs: {form.errors.as_text()}")
-        print(f"form_invalid - Données brutes: {form.data}")
-        return HttpResponse(f"Erreur : formulaire invalide - {form.errors.as_text()}", status=400)
+    
+        def form_invalid(self, form):
+            print(f"form_invalid - Erreurs: {form.errors.as_text()}")
+            print(f"form_invalid - Données brutes: {form.data}")
+            return HttpResponse(f"Erreur : formulaire invalide - {form.errors.as_text()}", status=400)
 
     def get(self, request, *args, **kwargs):
         return HttpResponse("Utilisez POST pour ajouter un message", status=405)

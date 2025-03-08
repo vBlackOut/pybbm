@@ -12,6 +12,8 @@
         .bg-custom { background-color: #343a40; color: #ffffff; }
         .card { border-color: #dee2e6; }
         .controls { margin-top: 20px; text-align: center; }
+        .table th { background-color: #f1f1f1; }
+        .table tbody tr:hover { background-color: #e9ecef; }
     </style>
 </head>
 <body>
@@ -27,6 +29,9 @@
                         <li class="breadcrumb-item">
                             <a class="text-light" href="{% url 'pybb:index' %}">Forum</a>
                         </li>
+                        <li class="breadcrumb-item">
+                            <a class="text-light" href="#">{{ forum.category.name }}</a>
+                        </li>
                         <li class="breadcrumb-item active text-light" aria-current="page">{{ forum.name }}</li>
                     </ol>
                 </nav>
@@ -34,7 +39,7 @@
         </div>
         <div class="container mt-4">
             <div class="card">
-                <div class="card-header bg-custom text-white">Détails du Forum</div>
+                <div class="card-header bg-custom text-white">Détails du Forum : {{ forum.name }}</div>
                 <div class="card-body">
                     {% if forum.headline %}
                         <div class="forum-headline alert alert-info">
@@ -44,22 +49,23 @@
 
                     {% include "pybb/pagination.html" %}
 
-                    {% if forum.forums_accessed.exists %}
-                        {% include 'pybb/forum_list.html' with forum_list=forum.forums_accessed category='' parent_forum=forum %}
-                    {% else %}
-                        <p>Aucun sous-forum disponible.</p>
-                    {% endif %}
+                    {% with sub_forums=forum.forums_accessed %}
+                        {% if sub_forums.exists %}
+                            {% include 'pybb/forum_list.html' with forum_list=sub_forums category='' parent_forum=forum %}
+                        {% else %}
+                            <p class="text-muted">Aucun sous-forum disponible.</p>
+                        {% endif %}
+                    {% endwith %}
 
                     {% if topic_list %}
                         {% include "pybb/topic_list.html" %}
                     {% else %}
-                        <p>Aucun topic dans ce forum.</p>
+                        <p class="text-muted">Aucun topic dans ce forum.</p>
                     {% endif %}
 
                     {% include "pybb/pagination.html" %}
 
                     <div class="controls">
-                        {# Suppression temporaire de pybb_may_create_topic #}
                         {% include "pybb/_button_new_topic.html" %}
                         {% include "pybb/_button_forum_subscription.html" %}
                     </div>

@@ -120,7 +120,11 @@
                                                     <a class="fw-semibold" href="{{ forum.get_absolute_url }}">{{ forum.post_count }}</a>
                                                 </td>
                                                 <td class="forum-last-post">
-                                                    {% include "pybb/forum_last_update_info.html" %}
+                                                    {% if forum.latest_post %}
+                                                        <small>Par <strong>{{ forum.latest_post.user }}</strong> le {{ forum.latest_post.created|date:"d/m/Y" }}</small>
+                                                    {% else %}
+                                                        <small>Aucun message</small>
+                                                    {% endif %}
                                                 </td>
                                             </tr>
                                         {% endfor %}
@@ -139,6 +143,10 @@
                                 {% endwith %}
                             </tbody>
                         </table>
+                        <div id="mark-all-as-read" class="text-center mt-3">
+                            <a href="{% url 'pybb:latest_topics' %}">Last updates in topics</a> /
+                            <a href="{% url 'pybb:mark_all_as_read' %}">Mark all forums as read</a>
+                        </div>
                     {% else %}
                         <div class="text-center">
                             <h3>{% trans 'No forums created' %}</h3>

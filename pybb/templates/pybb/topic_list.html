@@ -1,77 +1,59 @@
-{% load pybb_tags i18n %}
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ forum.name }}</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css">
-    <style>
-        body { background-color: #f8f9fa; color: #212529; }
-        .bg-custom { background-color: #343a40; color: #ffffff; }
-        .card { border-color: #dee2e6; }
-        .controls { margin-top: 20px; text-align: center; }
-        .table th { background-color: #f1f1f1; }
-        .table tbody tr:hover { background-color: #e9ecef; }
-    </style>
-</head>
-<body>
-    <main id="main-container">
-        <div class="bg-custom py-3">
-            <div class="container d-flex justify-content-between align-items-center">
-                <div class="d-flex align-items-center">
-                    <i class="bi bi-chat-dots-fill fs-2 me-2"></i>
-                    <h1 class="h3 fw-bold mb-0">{{ forum.name }}</h1>
-                </div>
-                <nav aria-label="breadcrumb">
-                    <ol class="breadcrumb breadcrumb-alt text-white">
-                        <li class="breadcrumb-item">
-                            <a class="text-light" href="{% url 'pybb:index' %}">Forum</a>
-                        </li>
-                        <li class="breadcrumb-item">
-                            <a class="text-light" href="#">{{ forum.category.name }}</a>
-                        </li>
-                        <li class="breadcrumb-item active text-light" aria-current="page">{{ forum.name }}</li>
-                    </ol>
-                </nav>
-            </div>
-        </div>
-        <div class="container mt-4">
-            <div class="card">
-                <div class="card-header bg-custom text-white">Détails du Forum : {{ forum.name }}</div>
-                <div class="card-body">
-                    {% if forum.headline %}
-                        <div class="forum-headline alert alert-info">
-                            {{ forum.headline|safe }}
-                        </div>
-                    {% endif %}
-
-                    {% include "pybb/pagination.html" %}
-
-                    {% if forum.forums_accessed.exists %}
-                        {% include 'pybb/forum_list.html' with forum_list=forum.forums_accessed category='' parent_forum=forum %}
-                    {% else %}
-                        <p class="text-muted">Aucun sous-forum disponible.</p>
-                    {% endif %}
-
-                    {% if topic_list %}
-                        {% include "pybb/topic_list.html" %}
-                    {% else %}
-                        <p class="text-muted">Aucun topic dans ce forum.</p>
-                    {% endif %}
-
-                    {% include "pybb/pagination.html" %}
-
-                    <div class="controls">
-                        {# Suppression temporaire de pybb_may_create_topic #}
-                        {% include "pybb/_button_new_topic.html" %}
-                        {% include "pybb/_button_forum_subscription.html" %}
-                    </div>
-                </div>
-            </div>
-        </div>
-    </main>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-</body>
-</html>
+{% load i18n pybb_tags %}
+<div class="topics">
+    {% if topic_list %}
+        <table class="table table-striped table-hover">
+            <thead class="border-bottom">
+                <tr>
+                    <th style="font-size: .875rem; text-transform: uppercase; letter-spacing: .0625em;">{% trans 'Topic' %}</th>
+                    <th style="font-size: .875rem; text-transform: uppercase; letter-spacing: .0625em; text-align: center;">{% trans 'Posts' %}</th>
+                    <th style="font-size: .875rem; text-transform: uppercase; letter-spacing: .0625em; text-align: center;">{% trans 'Views' %}</th>
+                    <th style="font-size: .875rem; text-transform: uppercase; letter-spacing: .0625em;">{% trans 'Last post' %}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for topic in topic_list|pybb_topic_unread:user %}
+                    <tr class="topic-row {% if topic.sticky %}table-primary{% endif %} {% if topic.unread %}table-warning{% endif %}">
+                        <td class="topic-name">
+                            <a href="{{ topic.get_absolute_url }}" class="fw-semibold text-truncate d-block">{{ topic.name|truncatewords:10 }}</a>
+                            {% if topic.sticky %}<span class="badge bg-success ms-2">{% trans 'Sticky' %}</span>{% endif %}
+                            {% if topic.closed %}<span class="badge bg-danger ms-2">{% trans 'Closed' %}</span>{% endif %}
+                            {% with topic|pybb_topic_inline_pagination as pages %}
+                                {% if pages|length > 1 %}
+                                    <div class="mt-1">
+                                        <span class="text-muted small">{% trans 'Pages' %}:</span>
+                                        {% for page in pages %}
+                                            {% if page == '...' %}
+                                                <span class="mx-1">...</span>
+                                            {% else %}
+                                                <a href="{{ topic.get_absolute_url }}?page={{ page }}" class="btn btn-sm btn-outline-secondary mx-1">{{ page }}</a>
+                                            {% endif %}
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
+                            {% endwith %}
+                        </td>
+                        <td class="topic-post-count" style="text-align: center; vertical-align: middle; padding: 8px;">
+                            {{ topic.post_count }}
+                        </td>
+                        <td class="topic-view-count" style="text-align: center; vertical-align: middle; padding: 8px;">
+                            {{ topic|pybbm_calc_topic_views }}
+                        </td>
+                        <td class="topic-last-post" style="vertical-align: middle; padding: 8px;">
+                            {% if topic.last_post %}
+                                <small>Par <strong>{{ topic.last_post.user }}</strong> le {{ topic.last_post.created|date:"d/m/Y" }}</small>
+                            {% else %}
+                                <small class="text-muted">{% trans 'No messages' %}</small>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="4" class="text-center text-muted">Aucun topic dans ce forum.</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p class="text-center text-muted">Aucun topic dans ce forum.</p>
+    {% endif %}
+</div>

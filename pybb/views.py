@@ -513,11 +513,10 @@ class AddPostView(CreateView):
     def dispatch(self, request, *args, **kwargs):
         if not request.user.is_authenticated:
             return HttpResponse("Utilisateur non authentifié", status=403)
-        self.user = request.user
-        print(f"Utilisateur: {self.user.username}, is_authenticated: {self.user.is_authenticated}")
+        print(f"Utilisateur: {request.user.username}, is_authenticated: {request.user.is_authenticated}")
 
         self.topic = get_object_or_404(perms.filter_topics(request.user, Topic.objects.all()), pk=kwargs['topic_id'])
-        if not perms.may_create_post(self.user, self.topic):
+        if not perms.may_create_post(request.user, self.topic):
             raise PermissionDenied
         print(f"POST data: {request.POST}")
         return super().dispatch(request, *args, **kwargs)
@@ -526,18 +525,17 @@ class AddPostView(CreateView):
         ip = self.request.META.get('REMOTE_ADDR', '')
         form_kwargs = {
             'topic': self.topic,
-            'user': self.user,  # Passer l'utilisateur explicitement
+            'request': self.request,  # Passer la requête complète
             'ip': ip,
             'may_create_poll': False,
             'may_edit_topic_slug': False
         }
-        print(f"Form kwargs - user: {form_kwargs['user']}, topic: {form_kwargs['topic'].id}")
+        print(f"Form kwargs - request.user: {form_kwargs['request'].user}, topic: {form_kwargs['topic'].id}")
         return form_kwargs
 
     def form_valid(self, form):
-        # Laisser PostForm gérer la sauvegarde avec self.user
         self.object, topic = form.save(commit=False)
-        self.object.user = self.user  # Forcer l'utilisateur ici aussi par sécurité
+        self.object.user = self.request.user  # Forcer par sécurité
         self.object.topic = self.topic
         try:
             self.object.save()

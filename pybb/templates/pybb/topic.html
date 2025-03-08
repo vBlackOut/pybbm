@@ -15,7 +15,7 @@
         .message-card { margin-bottom: 15px; }
         .author-col { max-width: 200px; }
         .message-col { flex-grow: 1; }
-        .form-container { margin-bottom: 20px; }
+        .form-container { margin-top: 20px; }
     </style>
 </head>
 <body>
@@ -56,20 +56,6 @@
                         <div class="alert alert-info">
                             Ce topic existe mais n’a pas encore de messages.
                         </div>
-                    {% endif %}
-
-                    {% if form and user.is_authenticated and topic.forum %}
-                        <div class="form-container">
-                            <form method="post" action="{% url 'pybb:add_post' topic.pk %}" class="d-flex">
-                                {% csrf_token %}
-                                {{ form.user.as_hidden }} {# Champ utilisateur caché #}
-                                <textarea name="body" class="form-control me-2" placeholder="{% trans 'Écrire un message...' %}" rows="2" required></textarea>
-                                <button type="submit" class="btn btn-primary">{% trans 'Envoyer' %}</button>
-                            </form>
-                        </div>
-                    {% elif not user.is_authenticated and not topic_does_not_exist %}
-                        <p class="text-muted">{% trans 'Vous devez vous connecter pour poster un message.' %}</p>
-                        <a href="{% url 'login' %}?next={{ request.path }}" class="btn btn-sm btn-primary">{% trans 'Se connecter' %}</a>
                     {% endif %}
 
                     {% include "pybb/pagination.html" %}
@@ -116,6 +102,18 @@
                                 <a href="{% url 'pybb:add_subscription' topic.id %}" class="btn btn-sm btn-outline-secondary me-2">{% trans 'Subscribe' %}</a>
                             {% endif %}
                         </div>
+
+                        <div class="form-container">
+                            <form method="post" action="{% url 'pybb:add_post' topic.pk %}" class="d-flex">
+                                {% csrf_token %}
+                                {{ form.user.as_hidden }} {# Champ utilisateur caché #}
+                                <textarea name="body" class="form-control me-2" placeholder="{% trans 'Écrire un message...' %}" rows="2" required></textarea>
+                                <button type="submit" class="btn btn-primary">{% trans 'Envoyer' %}</button>
+                            </form>
+                        </div>
+                    {% elif not user.is_authenticated and not topic_does_not_exist %}
+                        <p class="text-muted">{% trans 'Vous devez vous connecter pour poster un message.' %}</p>
+                        <a href="{% url 'login' %}?next={{ request.path }}" class="btn btn-sm btn-primary">{% trans 'Se connecter' %}</a>
                     {% endif %}
                 </div>
             </div>

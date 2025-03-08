@@ -535,7 +535,7 @@ class AddPostView(CreateView):
         return form_kwargs
 
     def post(self, request, *args, **kwargs):
-        form = self.get_form()
+        form = self.form_class(request.POST, **self.get_form_kwargs())
         print(f"post - Formulaire créé, données: {form.data}")
         if form.is_valid():
             return self.form_valid(form)

@@ -507,7 +507,6 @@ class PostEditMixin(PybbFormsMixin):
                                                              aformset=aformset,
                                                              pollformset=pollformset))
 
-
 class AddPostView(PostEditMixin, generic.CreateView):
     template_name = 'pybb/add_post.html'
 
@@ -564,18 +563,27 @@ class AddPostView(PostEditMixin, generic.CreateView):
         return form_kwargs
 
     def form_valid(self, form):
-        self.object, topic = form.save(commit=False)
-        self.object.user = self.user  # Utiliser self.user directement
+        # Créer le post manuellement au lieu de dépendre de form.save()
+        body = form.cleaned_data['body']
         if self.topic:
-            self.object.topic = self.topic
+            topic = self.topic
         elif self.forum:
-            self.object.topic = Topic.objects.create(
+            topic = Topic.objects.create(
                 forum=self.forum,
                 name=form.cleaned_data.get('name', 'New Topic'),
                 user=self.user
             )
-        
-        # Gestion des attachements et sondages (inchangé)
+        else:
+            raise Http404("Ni topic ni forum spécifié")
+
+        self.object = Post(
+            topic=topic,
+            user=self.user,
+            body=body,
+            ip=self.request.META.get('REMOTE_ADDR', '')
+        )
+
+        # Gestion des attachements et sondages
         success = True
         save_attachments = False
         save_poll_answers = False
@@ -617,7 +625,6 @@ class AddPostView(PostEditMixin, generic.CreateView):
                 errors = form._errors.setdefault('name', ErrorList())
                 errors += e.error_list
             else:
-                self.object.topic = topic
                 self.object.save()
                 if save_attachments:
                     aformset.save()
@@ -625,6 +632,8 @@ class AddPostView(PostEditMixin, generic.CreateView):
                         self.object.save()
                 if save_poll_answers:
                     pollformset.save()
+                topic.post_count = topic.posts.count()
+                topic.save()
                 return HttpResponseRedirect(self.get_success_url())
         return self.render_to_response(self.get_context_data(form=form,
                                                              aformset=aformset,
@@ -640,7 +649,6 @@ class AddPostView(PostEditMixin, generic.CreateView):
         if (not self.request.user.is_authenticated) and defaults.PYBB_PREMODERATION:
             return reverse('pybb:index')
         return self.object.get_absolute_url()
-
 
 class EditPostView(PostEditMixin, generic.UpdateView):
 

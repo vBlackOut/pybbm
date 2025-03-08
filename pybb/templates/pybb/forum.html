@@ -42,18 +42,19 @@
                         </div>
                     {% endif %}
 
-                    <!-- Débogage -->
-                    <h3>Débogage</h3>
-                    <p>Forum: {{ forum.name }}</p>
-                    <p>Catégorie: {{ forum.category.name }}</p>
-                    <p>Sous-forums (forums_accessed): {{ forum.forums_accessed|length }} - {{ forum.forums_accessed|default:"Aucun" }}</p>
-                    <p>Topics: {{ topic_list|length }} - {{ topic_list|default:"Aucun" }}</p>
-
                     {% include "pybb/pagination.html" %}
 
-                    {% include 'pybb/forum_list.html' with forum_list=forum.forums_accessed category='' parent_forum=forum %}
+                    {% if forum.forums_accessed.exists %}
+                        {% include 'pybb/forum_list.html' with forum_list=forum.forums_accessed category='' parent_forum=forum %}
+                    {% else %}
+                        <p>Aucun sous-forum disponible.</p>
+                    {% endif %}
 
-                    {% include "pybb/topic_list.html" %}
+                    {% if topic_list %}
+                        {% include "pybb/topic_list.html" %}
+                    {% else %}
+                        <p>Aucun topic dans ce forum.</p>
+                    {% endif %}
 
                     {% include "pybb/pagination.html" %}
 

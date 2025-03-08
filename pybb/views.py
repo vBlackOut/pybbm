@@ -516,18 +516,17 @@ class AddPostView(CreateView):
         self.user = request.user
         print(f"Utilisateur: {self.user.username}, is_authenticated: {self.user.is_authenticated}")
 
-        # Initialiser self.forum et self.topic
-        self.forum = None
         self.topic = get_object_or_404(perms.filter_topics(request.user, Topic.objects.all()), pk=kwargs['topic_id'])
         if not perms.may_create_post(self.user, self.topic):
             raise PermissionDenied
+        print(f"POST data: {request.POST}")
         return super().dispatch(request, *args, **kwargs)
 
     def get_form_kwargs(self):
         ip = self.request.META.get('REMOTE_ADDR', '')
         form_kwargs = {
             'topic': self.topic,
-            'user': self.user,
+            'user': self.user,  # Passer l'utilisateur explicitement
             'ip': ip,
             'may_create_poll': False,
             'may_edit_topic_slug': False
@@ -536,13 +535,10 @@ class AddPostView(CreateView):
         return form_kwargs
 
     def form_valid(self, form):
-        body = form.cleaned_data['body']
-        self.object = Post(
-            topic=self.topic,
-            user=self.user,
-            body=body,
-            ip=self.request.META.get('REMOTE_ADDR', '')
-        )
+        # Laisser PostForm gérer la sauvegarde avec self.user
+        self.object, topic = form.save(commit=False)
+        self.object.user = self.user  # Forcer l'utilisateur ici aussi par sécurité
+        self.object.topic = self.topic
         try:
             self.object.save()
             self.topic.post_count = self.topic.posts.count()
@@ -552,7 +548,8 @@ class AddPostView(CreateView):
             return HttpResponse(f"Erreur lors de l’ajout : {str(e)}", status=500)
 
     def form_invalid(self, form):
-        return HttpResponse(f"Erreur : formulaire invalide - {form.errors}", status=400)
+        print(f"Formulaire invalide - Erreurs: {form.errors}")
+        return HttpResponse(f"Erreur : formulaire invalide - {form.errors.as_text()}", status=400)
 
     def get(self, request, *args, **kwargs):
         return HttpResponse("Utilisez POST pour ajouter un message", status=405)

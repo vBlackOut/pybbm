@@ -513,45 +513,49 @@ class AddPostView(CreateView):
     def dispatch(self, request, *args, **kwargs):
         if not request.user.is_authenticated:
             return HttpResponse("Utilisateur non authentifié", status=403)
-        print(f"Utilisateur: {request.user.username}, is_authenticated: {request.user.is_authenticated}")
+        self.user = request.user
+        print(f"Dispatch - Utilisateur: {self.user.username}, is_authenticated: {self.user.is_authenticated}")
+        print(f"Dispatch - POST data: {request.POST}")
 
         self.topic = get_object_or_404(perms.filter_topics(request.user, Topic.objects.all()), pk=kwargs['topic_id'])
-        if not perms.may_create_post(request.user, self.topic):
+        if not perms.may_create_post(self.user, self.topic):
             raise PermissionDenied
-        print(f"POST data: {request.POST}")
         return super().dispatch(request, *args, **kwargs)
 
     def get_form_kwargs(self):
         ip = self.request.META.get('REMOTE_ADDR', '')
         form_kwargs = {
             'topic': self.topic,
-            'request': self.request,  # Passer la requête complète
+            'request': self.request,  # Passer la requête
             'ip': ip,
             'may_create_poll': False,
             'may_edit_topic_slug': False
         }
-        print(f"Form kwargs - request.user: {form_kwargs['request'].user}, topic: {form_kwargs['topic'].id}")
+        print(f"get_form_kwargs - request.user: {form_kwargs['request'].user}, topic: {form_kwargs['topic'].id}")
         return form_kwargs
 
     def form_valid(self, form):
+        print(f"form_valid - Données validées: {form.cleaned_data}")
         self.object, topic = form.save(commit=False)
-        self.object.user = self.request.user  # Forcer par sécurité
+        self.object.user = self.request.user  # Forcer l'utilisateur
         self.object.topic = self.topic
         try:
             self.object.save()
             self.topic.post_count = self.topic.posts.count()
             self.topic.save()
+            print(f"form_valid - Post sauvegardé: {self.object.id}")
             return HttpResponse("Post ajouté avec succès")
         except Exception as e:
+            print(f"form_valid - Erreur sauvegarde: {str(e)}")
             return HttpResponse(f"Erreur lors de l’ajout : {str(e)}", status=500)
 
     def form_invalid(self, form):
-        print(f"Formulaire invalide - Erreurs: {form.errors}")
+        print(f"form_invalid - Erreurs: {form.errors.as_text()}")
         return HttpResponse(f"Erreur : formulaire invalide - {form.errors.as_text()}", status=400)
 
     def get(self, request, *args, **kwargs):
         return HttpResponse("Utilisez POST pour ajouter un message", status=405)
-
+        
 class EditPostView(PostEditMixin, generic.UpdateView):
 
     model = Post

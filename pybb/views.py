@@ -526,7 +526,7 @@ class AddPostView(CreateView):
         ip = self.request.META.get('REMOTE_ADDR', '')
         form_kwargs = {
             'topic': self.topic,
-            'request': self.request,  # Passer la requête
+            'request': self.request,
             'ip': ip,
             'may_create_poll': False,
             'may_edit_topic_slug': False
@@ -534,10 +534,18 @@ class AddPostView(CreateView):
         print(f"get_form_kwargs - request.user: {form_kwargs['request'].user}, topic: {form_kwargs['topic'].id}")
         return form_kwargs
 
+    def post(self, request, *args, **kwargs):
+        form = self.get_form()
+        print(f"post - Formulaire créé, données: {form.data}")
+        if form.is_valid():
+            return self.form_valid(form)
+        else:
+            return self.form_invalid(form)
+
     def form_valid(self, form):
         print(f"form_valid - Données validées: {form.cleaned_data}")
         self.object, topic = form.save(commit=False)
-        self.object.user = self.request.user  # Forcer l'utilisateur
+        self.object.user = self.request.user
         self.object.topic = self.topic
         try:
             self.object.save()
@@ -551,6 +559,7 @@ class AddPostView(CreateView):
 
     def form_invalid(self, form):
         print(f"form_invalid - Erreurs: {form.errors.as_text()}")
+        print(f"form_invalid - Données brutes: {form.data}")
         return HttpResponse(f"Erreur : formulaire invalide - {form.errors.as_text()}", status=400)
 
     def get(self, request, *args, **kwargs):

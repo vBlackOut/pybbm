@@ -509,7 +509,6 @@ class PostEditMixin(PybbFormsMixin):
 
 
 class AddPostView(PostEditMixin, generic.CreateView):
-
     template_name = 'pybb/add_post.html'
 
     @method_decorator(csrf_protect)
@@ -553,20 +552,86 @@ class AddPostView(PostEditMixin, generic.CreateView):
 
     def get_form_kwargs(self):
         ip = self.request.META.get('REMOTE_ADDR', '')
-        form_kwargs = super(AddPostView, self).get_form_kwargs()
+        form_kwargs = super().get_form_kwargs()
         form_kwargs.update(dict(topic=self.topic, forum=self.forum, user=self.user,
-                           ip=ip, initial={}))
+                               ip=ip, initial={}))
         if getattr(self, 'quote', None):
             form_kwargs['initial']['body'] = self.quote
-        if defaults.PYBB_ENABLE_ADMIN_POST_FORM and \
-                perms.may_post_as_admin(self.user):
+        if defaults.PYBB_ENABLE_ADMIN_POST_FORM and perms.may_post_as_admin(self.user):
             form_kwargs['initial']['login'] = getattr(self.user, username_field)
         form_kwargs['may_create_poll'] = perms.may_create_poll(self.user)
         form_kwargs['may_edit_topic_slug'] = perms.may_edit_topic_slug(self.user)
         return form_kwargs
 
+    def form_valid(self, form):
+        self.object, topic = form.save(commit=False)
+        self.object.user = self.user  # Utiliser self.user directement
+        if self.topic:
+            self.object.topic = self.topic
+        elif self.forum:
+            self.object.topic = Topic.objects.create(
+                forum=self.forum,
+                name=form.cleaned_data.get('name', 'New Topic'),
+                user=self.user
+            )
+        
+        # Gestion des attachements et sondages (inchangé)
+        success = True
+        save_attachments = False
+        save_poll_answers = False
+
+        if perms.may_attach_files(self.user):
+            aformset = self.get_attachment_formset_class()(
+                self.request.POST, self.request.FILES, instance=self.object
+            )
+            if aformset.is_valid():
+                save_attachments = True
+            else:
+                success = False
+        else:
+            aformset = None
+
+        if perms.may_create_poll(self.user):
+            pollformset = self.get_poll_answer_formset_class()()
+            if getattr(self, 'forum', None) or topic.head == self.object:
+                if topic.poll_type != Topic.POLL_TYPE_NONE:
+                    pollformset = self.get_poll_answer_formset_class()(
+                        self.request.POST, instance=topic
+                    )
+                    if pollformset.is_valid():
+                        save_poll_answers = True
+                    else:
+                        success = False
+                else:
+                    topic.poll_question = None
+                    if topic.pk:
+                        topic.poll_answers.all().delete()
+        else:
+            pollformset = None
+
+        if success:
+            try:
+                topic.save()
+            except ValidationError as e:
+                success = False
+                errors = form._errors.setdefault('name', ErrorList())
+                errors += e.error_list
+            else:
+                self.object.topic = topic
+                self.object.save()
+                if save_attachments:
+                    aformset.save()
+                    if self.object.attachments.count():
+                        self.object.save()
+                if save_poll_answers:
+                    pollformset.save()
+                return HttpResponseRedirect(self.get_success_url())
+        return self.render_to_response(self.get_context_data(form=form,
+                                                             aformset=aformset,
+                                                             pollformset=pollformset))
+
     def get_context_data(self, **kwargs):
-        ctx = super(AddPostView, self).get_context_data(**kwargs)
+        ctx = super().get_context_data(**kwargs)
         ctx['forum'] = self.forum
         ctx['topic'] = self.topic
         return ctx

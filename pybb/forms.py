@@ -70,6 +70,7 @@ class PostForm(forms.ModelForm):
         self.forum = kwargs.pop('forum', None)
         self.may_create_poll = kwargs.pop('may_create_poll', False)
         self.may_edit_topic_slug = kwargs.pop('may_edit_topic_slug', False)
+        print(f"PostForm init - user: {self.user}, topic: {self.topic.id if self.topic else None}, forum: {self.forum}")
         super().__init__(*args, **kwargs)
 
         # Ne pas ajouter de champs dynamiques sauf si explicitement requis
@@ -99,25 +100,29 @@ class PostForm(forms.ModelForm):
     def clean_body(self):
         body = self.cleaned_data['body']
         user = self.user or self.instance.user
+        print(f"Cleaning body: {body}, user: {user}")
         if defaults.PYBB_BODY_VALIDATOR:
-            defaults.PYBB_BODY_VALIDATOR(user, body)
+            try:
+                defaults.PYBB_BODY_VALIDATOR(user, body)
+            except forms.ValidationError as e:
+                print(f"Body validator failed: {e}")
+                raise
         for cleaner in defaults.PYBB_BODY_CLEANERS:
-            body = util.get_body_cleaner(cleaner)(user, body)
+            try:
+                body = util.get_body_cleaner(cleaner)(user, body)
+            except Exception as e:
+                print(f"Body cleaner failed: {e}")
+                raise forms.ValidationError(f"Erreur dans le cleaner : {e}")
         return body
 
     def clean(self):
         cleaned_data = super().clean()
-        # Ne pas valider poll_type/poll_question si may_create_poll est False
-        if self.may_create_poll:
-            poll_type = cleaned_data.get('poll_type', Topic.POLL_TYPE_NONE)
-            poll_question = cleaned_data.get('poll_question', None)
-            if poll_type != Topic.POLL_TYPE_NONE and not poll_question:
-                raise forms.ValidationError(_('Poll question is required when adding a poll'))
+        print(f"Cleaned data: {cleaned_data}")
         return cleaned_data
 
     def save(self, commit=True):
         if self.instance.pk:
-            # Cas d'édition d'un post existant
+            # Cas d'édition
             post = super().save(commit=False)
             if self.user:
                 post.user = self.user
@@ -134,29 +139,14 @@ class PostForm(forms.ModelForm):
                 post.save()
             return post, post.topic
 
-        # Cas de création d’un nouveau post
+        # Cas de création
         allow_post = True
         if defaults.PYBB_PREMODERATION:
             allow_post = defaults.PYBB_PREMODERATION(self.user, self.cleaned_data['body'])
 
-        if self.forum:
-            topic = Topic(
-                forum=self.forum,
-                user=self.user,
-                name=self.cleaned_data.get('name', 'New Topic'),
-                poll_type=self.cleaned_data.get('poll_type', Topic.POLL_TYPE_NONE) if self.may_create_poll else Topic.POLL_TYPE_NONE,
-                poll_question=self.cleaned_data.get('poll_question', None) if self.may_create_poll else None,
-                slug=self.cleaned_data.get('slug', None) if self.may_edit_topic_slug else None,
-            )
-            if not allow_post:
-                topic.on_moderation = True
-        elif self.topic:
-            topic = self.topic
-        else:
-            raise ValueError('Topic or forum must be provided')
-
+        topic = self.topic  # Utiliser le topic passé par AddPostView
         post = Post(
-            user=self.user,
+            user=self.user,  # Forcer l'utilisateur ici
             body=self.cleaned_data['body'],
             user_ip=self.ip if self.ip else '0.0.0.0'
         )
@@ -164,11 +154,11 @@ class PostForm(forms.ModelForm):
             post.on_moderation = True
 
         if commit:
-            topic.save()
             post.topic = topic
             post.save()
+            topic.post_count = topic.posts.count()
+            topic.save()
         return post, topic
-
 
 class MovePostForm(forms.Form):
 
